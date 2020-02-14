@@ -1,3 +1,4 @@
+import logging
 import os
 
 import dotenv
@@ -19,8 +20,10 @@ def _create_table(func):
         try:
             cls.execute(create_query)
             cls.commit()
+            logging.debug(f'Table `{cls.__tablename__}` was created successfully')
         except psycopg2.ProgrammingError as e:
             cls.rollback()
+            logging.debug(f'Table `{cls.__tablename__}` was not created because it already exists')
 
         cls._table_created = True
         return func(cls, *args, **kwargs)
@@ -33,15 +36,24 @@ class Model(metaclass=ModelMeta):
     _table_created = False
 
     def __init__(self, obj_id):
-        self.__obj_id = obj_id
+        self.obj_id = obj_id
 
     def __repr__(self):
-        return f'<{self.__class__.__name__}> id: {self.__obj_id}'
+        keys = self.__class__.get_all_columns().keys()
+        keys_str = ', '.join([f'{key}: {getattr(self, key)}' for key in keys])
+        return f'<{self.__class__.__name__}> {keys_str}'
 
     @staticmethod
     def execute(query):
+        logging.debug(f'Trying to execute SQL query `{query}`')
+
         cursor = Model.__get_connection().cursor()
         cursor.execute(query)
+
+        try:
+            return cursor.fetchall()
+        except psycopg2.ProgrammingError as e:
+            return None
 
     @staticmethod
     def rollback():
@@ -59,12 +71,11 @@ class Model(metaclass=ModelMeta):
         pkey_name = cls.get_primary_key_column().col_name
         query = f'INSERT INTO "{cls.__tablename__}"({keys}) VALUES ({values}) RETURNING {pkey_name};'
         try:
-            cursor = Model.__get_connection().cursor()
-            cursor.execute(query)
-            return cls(cursor.fetchall()[0][0])
+            result = Model.execute(query)
+            return cls(result[0][0])
         except psycopg2.DatabaseError as e:
             Model.rollback()
-            raise exc.UniqueViolationError(str(e))
+            raise exc.SQLExecutionError(str(e))
 
     @classmethod
     def get_primary_key_column(cls):
@@ -73,6 +84,10 @@ class Model(metaclass=ModelMeta):
         if primary_keys:
             return primary_keys[0]
         return None
+
+    @classmethod
+    def get_base_class(cls):
+        return Model
 
     @classmethod
     def get_all_columns(cls):
