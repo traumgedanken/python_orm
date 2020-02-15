@@ -19,12 +19,14 @@ class ModelMeta(type):
 
     @staticmethod
     def __check_primary_key(cls_obj, name):
+        """Check if primary key is specified"""
         primary_key = cls_obj.get_primary_key_column()
         if not primary_key:
             raise PrimaryKeyError(f'No primary key is specified for class `{name}`')
 
     @staticmethod
     def __check_table_name(cls_obj, name):
+        """Validate specified table name"""
         if not hasattr(cls_obj, '__tablename__'):
             raise TableNameError(f'No table name is specified for class `{name}`')
 
@@ -33,6 +35,7 @@ class ModelMeta(type):
 
     @staticmethod
     def __update_columns_info(cls_obj):
+        """Update column objects to ad into then info about column and table names"""
         table_name = cls_obj.__tablename__
         columns = cls_obj.get_all_columns()
         for col_name, col_obj in columns.items():
